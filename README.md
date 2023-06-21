@@ -1,4 +1,5 @@
 # nanoRWKV
+> minimal implementation of RWKV language model following nanoGPT
 
 ![nanoGPT](assets/nanorwkv.jpg)
 
