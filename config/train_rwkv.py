@@ -2,7 +2,7 @@
 # launch as the following (e.g. in a screen session) and wait ~5 days:
 # $ torchrun --standalone --nproc_per_node=8 train.py config/train_gpt2.py
 
-wandb_log = False
+wandb_log = True
 wandb_project = 'nanoRWKV'
 wandb_run_name='RWKV-130M'
 

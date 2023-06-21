@@ -3,7 +3,9 @@
 
 ![nanoGPT](assets/nanorwkv.jpg)
 
-The [nanoGPT](https://github.com/karpathy/nanoGPT)-style implementation of [RWKV Language Model](https://www.rwkv.com). It is a rewrite of [RWKV-v4neo](https://github.com/BlinkDL/RWKV-LM/tree/main/RWKV-v4neo) and [HuggingFace Implementation](https://github.com/huggingface/transformers/blob/main/src/transformers/models/rwkv/modeling_rwkv.py) that aims to create a clean code base of RWKV for head-to-head comparison with GPT-series, while keeping in line with the simplicity and practicality of nanoGPT. So it could be used to train a GPT/RWKV model in this single repository. It is still an active projects and we are training a RWKV model with similar parameters to GPT-2 (124M) on OpenWebText, running on a single 8*V100 32GB node. (Your sponsorship of A100 for testing bf16 would be greatly appreciated :)
+The [nanoGPT](https://github.com/karpathy/nanoGPT)-style implementation of [RWKV Language Model](https://www.rwkv.com). It is a rewrite of [RWKV-v4neo](https://github.com/BlinkDL/RWKV-LM/tree/main/RWKV-v4neo) and [HuggingFace Implementation](https://github.com/huggingface/transformers/blob/main/src/transformers/models/rwkv/modeling_rwkv.py) that aims to create a clean code base of RWKV for head-to-head comparison with GPT-series, while keeping in line with the simplicity and practicality of nanoGPT. So it could be used to train a GPT/RWKV model in this single repository. 
+
+It is still an active project and we are training a RWKV model with similar size to GPT-2 (124M) on OpenWebText dataset on a single 8*V100 32GB node. (Your sponsorship of A100 for testing bf16 would be greatly appreciated :)
 
 To keep track of the ongoing experiments, please see this [wandb project](https://wandb.ai/hannibal046/nanoRWKV?workspace=user-hannibal046).
 
@@ -16,8 +18,8 @@ pip install torch numpy transformers datasets tiktoken wandb tqdm ninja
 ## preliminary
 Before kicking off this project, make sure you are familiar with:
 
-- nanoGPT: The simplest, fastest repository for training/finetuning medium-sized GPTs by great [Andrej Karpathy](https://karpathy.ai). You could find the code [here](https://github.com/karpathy/nanoGPT) and teaching video [here](https://www.youtube.com/watch?v=kCc8FmEb1nY).
-- RWKV Language Model: an RNN with GPT-level LLM performance, which can also be directly trained like a GPT transformer (parallelizable). The model is created by an independent researcher [Bo Peng](https://www.zhihu.com/people/bopengbopeng). You could find the official code [here](https://github.com/BlinkDL/RWKV-LM), along with its chat version [here](https://github.com/BlinkDL/ChatRWKV). For deep understanding of this model, the [paper](https://arxiv.org/abs/2305.13048) and this [tutorial](https://johanwind.github.io/2023/03/23/rwkv_details.html) would be much helpful.
+- **nanoGPT**: the simplest, fastest repository for training/finetuning medium-sized GPTs by great [Andrej Karpathy](https://karpathy.ai). Here you could find the [code](https://github.com/karpathy/nanoGPT) and the [teaching video](https://www.youtube.com/watch?v=kCc8FmEb1nY).
+- **RWKV Language Model**: an RNN with GPT-level LLM performance, which can also be directly trained like a GPT transformer (parallelizable). The model is created by an independent researcher [Bo Peng](https://www.zhihu.com/people/bopengbopeng). You could find the official [code](https://github.com/BlinkDL/RWKV-LM), along with its [chat version code](https://github.com/BlinkDL/ChatRWKV). For deeper understanding of this model, the [paper](https://arxiv.org/abs/2305.13048) and this [tutorial](https://johanwind.github.io/2023/03/23/rwkv_details.html) would be much helpful.
 
 ## reproducing RWKV
 
