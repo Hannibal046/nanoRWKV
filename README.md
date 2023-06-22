@@ -5,7 +5,9 @@
 
 The [nanoGPT](https://github.com/karpathy/nanoGPT)-style implementation of [RWKV Language Model](https://www.rwkv.com). It is a rewrite of [RWKV-v4neo](https://github.com/BlinkDL/RWKV-LM/tree/main/RWKV-v4neo) and [HuggingFace Implementation](https://github.com/huggingface/transformers/blob/main/src/transformers/models/rwkv/modeling_rwkv.py) that aims to create a clean code base of RWKV for head-to-head comparison with GPT-series, while keeping in line with the simplicity and practicality of nanoGPT. So it could be used to train a GPT or RWKV model in this single repository. 
 
-It is still an active project and we are training a RWKV model with similar size to GPT-2 (124M) on OpenWebText dataset on a single 8*V100 32GB node. To keep track of the **ongoing** experiments, please see this [wandb project](https://wandb.ai/hannibal046/nanoRWKV?workspace=user-hannibal046).
+It is still an active project and we are training a RWKV model with similar size to GPT-2 (124M) on OpenWebText dataset on a single 8*V100 32GB node. To keep track of the **ongoing** experiments, please see this [wandb project](https://wandb.ai/hannibal046/nanoRWKV?workspace=user-hannibal046). (looks good for now)
+
+![nanoGPT](assets/current_loss.png)
 
 ## install
 ```
