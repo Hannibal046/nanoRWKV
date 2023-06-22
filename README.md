@@ -41,7 +41,7 @@ For comparision, we also train a GPT-2 model(124M) on the same device with:
 torchrun --standalone --nproc_per_node=8 train.py config/train_gpt2.py
 ```
 
-We got the results as follows:
+We got the results as follows (check the progress on this [wandb project](https://wandb.ai/hannibal046/nanoRWKV?workspace=user-hannibal046)):
 
 | model | params | train loss | val loss |
 | ----- | ------ | ---------- | -------- |
