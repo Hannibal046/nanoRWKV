@@ -3,16 +3,16 @@
 
 ![nanoGPT](assets/nanorwkv.jpg)
 
-The [nanoGPT](https://github.com/karpathy/nanoGPT)-style implementation of [RWKV Language Model](https://www.rwkv.com). It is a rewrite of [RWKV-v4neo](https://github.com/BlinkDL/RWKV-LM/tree/main/RWKV-v4neo) and [HuggingFace Implementation](https://github.com/huggingface/transformers/blob/main/src/transformers/models/rwkv/modeling_rwkv.py) that aims to create a clean code base of RWKV for head-to-head comparison with GPT-series, while keeping in line with the simplicity and practicality of nanoGPT. So it could be used to train a GPT/RWKV model in this single repository. 
+The [nanoGPT](https://github.com/karpathy/nanoGPT)-style implementation of [RWKV Language Model](https://www.rwkv.com). It is a rewrite of [RWKV-v4neo](https://github.com/BlinkDL/RWKV-LM/tree/main/RWKV-v4neo) and [HuggingFace Implementation](https://github.com/huggingface/transformers/blob/main/src/transformers/models/rwkv/modeling_rwkv.py) that aims to create a clean code base of RWKV for head-to-head comparison with GPT-series, while keeping in line with the simplicity and practicality of nanoGPT. So it could be used to train a GPT or RWKV model in this single repository. 
 
-It is still an active project and we are training a RWKV model with similar size to GPT-2 (124M) on OpenWebText dataset on a single 8*V100 32GB node. (Your sponsorship of A100 for testing bf16 would be greatly appreciated :)
-
-To keep track of the ongoing experiments, please see this [wandb project](https://wandb.ai/hannibal046/nanoRWKV?workspace=user-hannibal046).
+It is still an active project and we are training a RWKV model with similar size to GPT-2 (124M) on OpenWebText dataset on a single 8*V100 32GB node. To keep track of the **ongoing** experiments, please see this [wandb project](https://wandb.ai/hannibal046/nanoRWKV?workspace=user-hannibal046).
 
 ## install
 ```
-conda create -n nanoRWKV python=3.8 && conda activate nanoRWKV
-conda install cuda -c nvidia/label/cuda-11.*.0 ## for loading customized cuda kernel
+conda create -n nanoRWKV python=3.8 
+conda activate nanoRWKV
+## replace * with your driver version
+conda install cuda -c nvidia/label/cuda-11.*.0 
 pip install torch numpy transformers datasets tiktoken wandb tqdm ninja
 ```
 ## preliminary
@@ -47,6 +47,18 @@ We got the results as follows:
 | ----- | ------ | ---------- | -------- |
 | GPT-2 | 124M   |            |          |
 | RWKV  | 130M   |            |          |
+
+## to-do list
+This is not a done project and there are a lot of cool stuffs to do:
+
+- [ ] More code comment in [modeling_rwkv.py](modeling_rwkv.py).
+- [ ] RNN mode for inference [[HF Implementation]](https://github.com/huggingface/transformers/blob/main/src/transformers/models/rwkv/modeling_rwkv.py)
+- [ ] rescale parameters for inference [[reference]](https://github.com/BlinkDL/RWKV-LM/blob/cca1b5e8e597cf40675882bb10b46287c844e35c/RWKV-v4neo/src/model_run.py#L31)
+- [ ] loading RWKV checkpoint for evaluation(may not comparable to GPT-2 due to different tokenizer) 
+- [ ] test bf16 training (Since V100 doesn't support bf16, your sponsorship of A100 for testing bf16 would be greatly appreciated :)
+- [ ] maybe scale up a little bit with DeepSpeed? Not sure, since nanoGPT didn't do this.
+- [ ] keep in line with the original implementaion of RWKV optimization. [[reference](https://github.com/BlinkDL/RWKV-LM/blob/cca1b5e8e597cf40675882bb10b46287c844e35c/RWKV-v4neo/src/model.py#L409)]
+- [ ] More analysis about RWKV in [scaling_laws.ipynb](scaling_laws.ipynb), [transformer_sizeing.ipynb](transformer_sizeing.ipynb)
 
 ## what is more
 If you want to know more about Large Language Models(LLM), please refer to this repository: [Awesome-LLM](https://github.com/Hannibal046/Awesome-LLM).
