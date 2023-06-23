@@ -351,87 +351,60 @@ class RWKV(nn.Module):
         self.config.block_size = block_size
 
     @classmethod
-    def from_pretrained(cls, model_type, override_args=None):
+    def from_pretrained(cls, model_type,use_customized_cuda_kernel=True):
         assert model_type in {
             'RWKV/rwkv-4-169m-pile',
             "RWKV/rwkv-4-430m-pile",
             "RWKV/rwkv-4-1b5-pile",
             "RWKV/rwkv-4-3b-pile",
+            "RWKV/rwkv-4-7b-pile",
+            "RWKV/rwkv-raven-7b",
+            "RWKV/rwkv-raven-1b5",
+            "RWKV/rwkv-raven-3b",
             }
-        override_args = override_args or {} # default to empty dict
-        # only dropout can be overridden see more notes below
-        assert all(k == 'dropout' for k in override_args)
-        from transformers import GPT2LMHeadModel
-        print("loading weights from pretrained gpt: %s" % model_type)
-
-        # n_layer, n_head and n_embd are determined from model_type
-        config_args = {
-            'RWKV/rwkv-4-169m-pile':  dict(n_layer=12, n_embd=768, intermediate_size=3072, vocab_size=50277),  
-            "RWKV/rwkv-4-430m-pile":  dict(n_layer=24, n_embd=1024, vocab_size=50277),  
-            "RWKV/rwkv-4-1b5-pile":   dict(n_layer=24, n_embd=2048, vocab_size=50277),  
-            "RWKV/rwkv-4-3b-pile":    dict(n_layer=32, n_embd=2560, vocab_size=50277),  
-        }[model_type]
-        # print("forcing vocab_size=50257, block_size=1024, bias=True")
-        config_args['vocab_size'] = 50257 # always 50257 for GPT model checkpoints
-        config_args['block_size'] = 1024 # always 1024 for GPT model checkpoints
-        config_args['bias'] = True # always True for GPT model checkpoints
-        # we can override the dropout rate, if desired
-        # num_layers = 12
-        # mapping = {
-        #     "rwkv.wte.weight":"rwkv.embeddings.weight",
-        #     "rwkv.ln_p.weight":"rwkv.blocks.0.pre_ln.weight",
-        #     "rwkv.ln_p.bias":"rwkv.blocks.0.pre_ln.bias",
-        #     "rwkv.ln_f.weight":"rwkv.ln_out.weight",
-        #     "rwkv.ln_f.bias":"rwkv.ln_out.bias",
-        #     "lm_head.weight":"head.weight",
-        #     **{f"rwkv.h.{layer_id}.ln_{norm_id}.weight":f"rwkv.blocks.{layer_id}.ln{norm_id}.weight" for layer_id in range(num_layers) for norm_id in [1,2]},
-        #     **{f"rwkv.h.{layer_id}.ln_{norm_id}.bias":f"rwkv.blocks.{layer_id}.ln{norm_id}.bias" for layer_id in range(num_layers) for norm_id in [1,2]},
-        #     **{f"rwkv.h.{layer_id}.attn.{_type}":f"rwkv.blocks.{layer_id}.attention.{_type}" for layer_id in range(num_layers) for _type in ["time_decay","time_first",'time_mix_key','time_mix_value',"time_mix_receptance"]},
-        #     **{f"rwkv.h.{layer_id}.attn.{_type}_proj.weight":f"rwkv.blocks.{layer_id}.attention.{_type}.weight" for layer_id in range(num_layers) for _type in ["key","value",'receptance',"output"]},
-        #     **{f"rwkv.h.{layer_id}.ffn.{_type}":f"rwkv.blocks.{layer_id}.feed_forward.{_type}" for layer_id in range(num_layers) for _type in ['time_mix_key',"time_mix_receptance"]},
-        #     **{f"rwkv.h.{layer_id}.ffn.{_type}_proj.weight":f"rwkv.blocks.{layer_id}.feed_forward.{_type}.weight" for layer_id in range(num_layers) for _type in ["key","value",'receptance']},
-        # }
-
-        # mapped_set = [mapping[x] for x in mymodel.state_dict().keys()]
-        # assert set(mapped_set) == set(model.state_dict().keys())
-
-        # for k1,k2 in mapping.items():
-        #     # print(k1,k2)
-        #     assert mymodel.state_dict()[k1].shape == model.state_dict()[k2].shape
-        #     mymodel.state_dict()[k1] = model.state_dict()[k2]
-        if 'dropout' in override_args:
-            print(f"overriding dropout rate to {override_args['dropout']}")
-            config_args['dropout'] = override_args['dropout']
-        # create a from-scratch initialized minGPT model
-        config = GPTConfig(**config_args)
-        model = GPT(config)
-        sd = model.state_dict()
-        sd_keys = sd.keys()
-        sd_keys = [k for k in sd_keys if not k.endswith('.attn.bias')] # discard this mask / buffer, not a param
-
+        print("loading weights from pretrained RWKV: %s" % model_type)
+                
         # init a huggingface/transformers model
-        model_hf = GPT2LMHeadModel.from_pretrained(model_type)
-        sd_hf = model_hf.state_dict()
+        from transformers import RwkvForCausalLM,RwkvConfig
+        hf_config = RwkvConfig.from_pretrained(model_type)
+        hf_model = RwkvForCausalLM.from_pretrained(model_type)
 
-        # copy while ensuring all of the parameters are aligned and match in names and shapes
-        sd_keys_hf = sd_hf.keys()
-        sd_keys_hf = [k for k in sd_keys_hf if not k.endswith('.attn.masked_bias')] # ignore these, just a buffer
-        sd_keys_hf = [k for k in sd_keys_hf if not k.endswith('.attn.bias')] # same, just the mask (buffer)
-        transposed = ['attn.c_attn.weight', 'attn.c_proj.weight', 'mlp.c_fc.weight', 'mlp.c_proj.weight']
-        # basically the openai checkpoints use a "Conv1D" module, but we only want to use a vanilla Linear
-        # this means that we have to transpose these weights when we import them
-        assert len(sd_keys_hf) == len(sd_keys), f"mismatched keys: {len(sd_keys_hf)} != {len(sd_keys)}"
-        for k in sd_keys_hf:
-            if any(k.endswith(w) for w in transposed):
-                # special treatment for the Conv1D weights we need to transpose
-                assert sd_hf[k].shape[::-1] == sd[k].shape
-                with torch.no_grad():
-                    sd[k].copy_(sd_hf[k].t())
-            else:
-                # vanilla copy over the other parameters
-                assert sd_hf[k].shape == sd[k].shape
-                with torch.no_grad():
-                    sd[k].copy_(sd_hf[k])
+        # create a from-scratch initialized RWKV model
+        config = {
+            "vocab_size":50277,
+            "n_layer":hf_config.num_hidden_layers,
+            "n_embd":hf_config.hidden_size,
+            "intermediate_size":hf_config.intermediate_size,
+            "use_customized_cuda_kernel":use_customized_cuda_kernel,
+        }
+        config = RWKVConfig(**config)
+        model = RWKV(config)
+
+        num_layers = config.n_layer
+        ## create mapping from the parameter name in RWKV to that of HF-RWKV
+        mapping = {
+            "rwkv.wte.weight":"rwkv.embeddings.weight",
+            "rwkv.ln_p.weight":"rwkv.blocks.0.pre_ln.weight",
+            "rwkv.ln_p.bias":"rwkv.blocks.0.pre_ln.bias",
+            "rwkv.ln_f.weight":"rwkv.ln_out.weight",
+            "rwkv.ln_f.bias":"rwkv.ln_out.bias",
+            "lm_head.weight":"head.weight",
+            **{f"rwkv.h.{layer_id}.ln_{norm_id}.weight":f"rwkv.blocks.{layer_id}.ln{norm_id}.weight" for layer_id in range(num_layers) for norm_id in [1,2]},
+            **{f"rwkv.h.{layer_id}.ln_{norm_id}.bias":f"rwkv.blocks.{layer_id}.ln{norm_id}.bias" for layer_id in range(num_layers) for norm_id in [1,2]},
+            **{f"rwkv.h.{layer_id}.attn.{_type}":f"rwkv.blocks.{layer_id}.attention.{_type}" for layer_id in range(num_layers) for _type in ["time_decay","time_first",'time_mix_key','time_mix_value',"time_mix_receptance"]},
+            **{f"rwkv.h.{layer_id}.attn.{_type}_proj.weight":f"rwkv.blocks.{layer_id}.attention.{_type}.weight" for layer_id in range(num_layers) for _type in ["key","value",'receptance',"output"]},
+            **{f"rwkv.h.{layer_id}.ffn.{_type}":f"rwkv.blocks.{layer_id}.feed_forward.{_type}" for layer_id in range(num_layers) for _type in ['time_mix_key',"time_mix_receptance"]},
+            **{f"rwkv.h.{layer_id}.ffn.{_type}_proj.weight":f"rwkv.blocks.{layer_id}.feed_forward.{_type}.weight" for layer_id in range(num_layers) for _type in ["key","value",'receptance']},
+        }
+
+        mapped_set = [mapping[x] for x in model.state_dict().keys()]
+        assert set(mapped_set) == set(hf_model.state_dict().keys())
+        sd = model.state_dict()
+        hf_sd = hf_model.state_dict()
+
+        for k1,k2 in mapping.items():
+            assert sd[k1].shape == hf_sd[k2].shape,(k1,k2)
+            sd[k1].copy_(hf_sd[k2])
 
         return model
 

@@ -10,3 +10,5 @@ __pycache__/
 input.txt
 RWKV-LM
 wandb
+draft.ipynb
+test.py
