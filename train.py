@@ -78,8 +78,6 @@ compile = True # use PyTorch 2.0 to compile the model to be faster
 # model
 model_type = 'gpt'
 use_customized_cuda_kernel = True
-gpt_tokenzier = tiktoken.get_encoding("gpt2")
-rwkv_tokenzier = AutoTokenizer.from_pretrained('RWKV/rwkv-4-169m-pile')
 # -----------------------------------------------------------------------------
 config_keys = [k for k,v in globals().items() if not k.startswith('_') and isinstance(v, (int, float, bool, str))]
 exec(open('configurator.py').read()) # overrides from command line or config file
@@ -248,8 +246,7 @@ if ddp:
 def estimate_loss():
     out = {}
     model.eval()
-    # for split in ['train', 'val']:
-    for split in ['val']:
+    for split in ['train', 'val']:
         losses = torch.zeros(eval_iters)
         for k in range(eval_iters):
             X, Y = get_batch(split)
@@ -295,8 +292,7 @@ while True:
     # evaluate the loss on train/val sets and write checkpoints
     if iter_num % eval_interval == 0 and master_process:
         losses = estimate_loss()
-        # print(f"step {iter_num}: train loss {losses['train']:.4f}, val loss {losses['val']:.4f}")
-        print(f"step {iter_num}: val loss {losses['val']:.4f}")
+        print(f"step {iter_num}: train loss {losses['train']:.4f}, val loss {losses['val']:.4f}")
         if wandb_log:
             wandb.log({
                 "iter": iter_num,
