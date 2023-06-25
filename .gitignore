@@ -12,3 +12,6 @@ RWKV-LM
 wandb
 draft.ipynb
 test.py
+pretrained_models
+plm
+transformers

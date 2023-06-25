@@ -21,6 +21,7 @@ import time
 import math,json
 import pickle
 from contextlib import nullcontext
+import tiktoken
 
 import numpy as np
 import torch
@@ -29,7 +30,8 @@ from torch.distributed import init_process_group, destroy_process_group
 
 from modeling_gpt import GPTConfig, GPT
 from modeling_rwkv import RWKVConfig,RWKV
-
+from transformers import AutoTokenizer
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
 # -----------------------------------------------------------------------------
 # default config values designed to train a gpt2 (124M) on OpenWebText
 # I/O
@@ -76,6 +78,8 @@ compile = True # use PyTorch 2.0 to compile the model to be faster
 # model
 model_type = 'gpt'
 use_customized_cuda_kernel = True
+gpt_tokenzier = tiktoken.get_encoding("gpt2")
+rwkv_tokenzier = AutoTokenizer.from_pretrained('RWKV/rwkv-4-169m-pile')
 # -----------------------------------------------------------------------------
 config_keys = [k for k,v in globals().items() if not k.startswith('_') and isinstance(v, (int, float, bool, str))]
 exec(open('configurator.py').read()) # overrides from command line or config file
@@ -123,8 +127,13 @@ val_data = np.memmap(os.path.join(data_dir, 'val.bin'), dtype=np.uint16, mode='r
 def get_batch(split):
     data = train_data if split == 'train' else val_data
     ix = torch.randint(len(data) - block_size, (batch_size,))
-    x = torch.stack([torch.from_numpy((data[i:i+block_size]).astype(np.int64)) for i in ix])
-    y = torch.stack([torch.from_numpy((data[i+1:i+1+block_size]).astype(np.int64)) for i in ix])
+
+    x = [torch.from_numpy((data[i:i+block_size]).astype(np.int64)) for i in ix]
+    y = [torch.from_numpy((data[i+1:i+1+block_size]).astype(np.int64)) for i in ix]
+    
+    x = torch.stack(x)
+    y = torch.stack(y)
+
     if device_type == 'cuda':
         # pin arrays x,y, which allows us to move them to GPU asynchronously (non_blocking=True)
         x, y = x.pin_memory().to(device, non_blocking=True), y.pin_memory().to(device, non_blocking=True)
@@ -157,7 +166,7 @@ elif model_type == 'rwkv':
     model_args = dict(n_layer=n_layer, n_embd=n_embd, block_size=block_size,
                   bias=bias, vocab_size=None, dtype=dtype,use_customized_cuda_kernel=use_customized_cuda_kernel) # start with model_args from command line
     
-    init_from = 'scratch'
+    # init_from = 'scratch'
 
 if init_from == 'scratch':
     # init a new model from scratch
@@ -199,6 +208,16 @@ elif init_from.startswith('gpt2'):
     # read off the created config params, so we can store them into checkpoint correctly
     for k in ['n_layer', 'n_head', 'n_embd', 'block_size', 'bias', 'vocab_size']:
         model_args[k] = getattr(model.config, k)
+
+elif init_from.startswith('RWKV'):
+    model = RWKV.from_pretrained(init_from,dtype=dtype)
+    enc = tiktoken.get_encoding("gpt2")
+    val_data_text = enc.decode(val_data)
+    toker = AutoTokenizer.from_pretrained(init_from)
+    val_data_rwkv = np.array(toker.encode(val_data_text))
+    val_data = val_data_rwkv
+    
+
 # crop down the model block size if desired, using model surgery
 if block_size < model.config.block_size:
     model.crop_block_size(block_size)
@@ -229,7 +248,8 @@ if ddp:
 def estimate_loss():
     out = {}
     model.eval()
-    for split in ['train', 'val']:
+    # for split in ['train', 'val']:
+    for split in ['val']:
         losses = torch.zeros(eval_iters)
         for k in range(eval_iters):
             X, Y = get_batch(split)
@@ -275,7 +295,8 @@ while True:
     # evaluate the loss on train/val sets and write checkpoints
     if iter_num % eval_interval == 0 and master_process:
         losses = estimate_loss()
-        print(f"step {iter_num}: train loss {losses['train']:.4f}, val loss {losses['val']:.4f}")
+        # print(f"step {iter_num}: train loss {losses['train']:.4f}, val loss {losses['val']:.4f}")
+        print(f"step {iter_num}: val loss {losses['val']:.4f}")
         if wandb_log:
             wandb.log({
                 "iter": iter_num,

@@ -3,7 +3,7 @@
 
 ![nanoGPT](assets/nanorwkv.jpg)
 
-The [nanoGPT](https://github.com/karpathy/nanoGPT)-style implementation of [RWKV Language Model](https://www.rwkv.com). It is a rewrite of [RWKV-v4neo](https://github.com/BlinkDL/RWKV-LM/tree/main/RWKV-v4neo) and [HuggingFace Implementation](https://github.com/huggingface/transformers/blob/main/src/transformers/models/rwkv/modeling_rwkv.py) that aims to create a clean code base of RWKV for head-to-head comparison with GPT-series, while keeping in line with the simplicity and practicality of nanoGPT. So it could be used to train a GPT or RWKV model in this single repository. 
+The [nanoGPT](https://github.com/karpathy/nanoGPT)-style implementation of [RWKV Language Model](https://www.rwkv.com) - an RNN with GPT-level LLM performance. It is a rewrite of [RWKV-v4neo](https://github.com/BlinkDL/RWKV-LM/tree/main/RWKV-v4neo) and [HuggingFace Implementation](https://github.com/huggingface/transformers/blob/main/src/transformers/models/rwkv/modeling_rwkv.py) that aims to create a clean code base of RWKV for head-to-head comparison with GPT-series, while keeping in line with the simplicity and practicality of nanoGPT. So it could be used to train a GPT or RWKV model in this single repository. 
 
 It is still an active project and we are training a RWKV model with similar size to GPT-2 (124M) on OpenWebText dataset on a single 8*V100 32GB node. To keep track of the **ongoing** experiments, please see this [wandb project](https://wandb.ai/hannibal046/nanoRWKV?workspace=user-hannibal046). (looks good for now)
 
@@ -50,9 +50,26 @@ We got the results as follows (check the progress on this [wandb project](https:
 | GPT-2 | 124M   |            |          |
 | RWKV  | 130M   |            |          |
 
+## baselines
+
+Existing OpenAI GPT-2 checkpoints and RWKV checkpoints allow us to get some baselines in place for openwebtext. We can get the numbers as follows:
+```
+python train.py config/eval_rwkv4_{169m|430m|1b5|3b}.py
+python train.py config/eval_gpt2{|_medium|_large|_xl}.py
+```
+and observe the following losses on val set:
+|    model   | RWKV |      |      |      | GPT-2 |      |      |      |
+|:----------:|:----:|:----:|:----:|:----:|:-----:|:----:|:----:|:----:|
+| parameters | 169M | 430M | 1.5B |  3B  |  124M | 350M | 774M | 1.5B |
+|  val loss  | 3.11 | 2.79 | 2.54 | 2.42 |  3.11 | 2.82 | 2.66 | 2.56 |
+
+Notice that both models are not trained in the openwebtext (RWKV in The Pile and OpenAI GPT-2 in private WebText), so they could be further improved due to dataset domain gap.
+
 ## to-do list
 This is not a done project and there are a lot of cool stuffs to do:
 
+- [ ] Doule check the correctness of the current implementation (need help).
+- [ ] A detailed and thorough jupyter notebook tutorial about RWKV.
 - [ ] More code comment in [modeling_rwkv.py](modeling_rwkv.py).
 - [ ] RNN mode for inference [[HF Implementation]](https://github.com/huggingface/transformers/blob/main/src/transformers/models/rwkv/modeling_rwkv.py)
 - [ ] rescale parameters for inference [[reference]](https://github.com/BlinkDL/RWKV-LM/blob/cca1b5e8e597cf40675882bb10b46287c844e35c/RWKV-v4neo/src/model_run.py#L31)

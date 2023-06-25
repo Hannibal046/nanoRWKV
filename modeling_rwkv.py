@@ -7,6 +7,7 @@ https://github.com/BlinkDL/RWKV-LM/blob/main/RWKV-v4neo/src/model.py
 https://github.com/huggingface/transformers/blob/main/src/transformers/models/rwkv/modeling_rwkv.py
 """
 
+
 import math
 import os
 import inspect
@@ -27,6 +28,16 @@ class LayerNorm(nn.Module):
 
     def forward(self, input):
         return F.layer_norm(input, self.weight.shape, self.weight, self.bias, 1e-5)
+
+# learn from GPT-4
+from unittest.mock import patch  
+class CudaNotAvailable:  
+    def __enter__(self):  
+        self.patcher = patch("torch.cuda.is_available", return_value=False)  
+        self.patcher.start()  
+  
+    def __exit__(self, exc_type, exc_value, traceback):  
+        self.patcher.stop()  
 
 # https://github.com/BlinkDL/RWKV-LM/blob/cca1b5e8e597cf40675882bb10b46287c844e35c/RWKV-v4/src/model.py#L21
 class L2Wrap(torch.autograd.Function):
@@ -138,7 +149,7 @@ class TimeMixing(nn.Module):
 
     def wkv_function(self,key,value,use_customized_cuda_kernel,state=None):
 
-        ## essentially, this customized cuda kernel delivers a faster for loop in time steps
+        ## essentially, this customized cuda kernel delivers a faster for loop across time steps
         if state is None and use_customized_cuda_kernel:
             B, T, C = key.size()
             return WKVKernel.apply(B, T, C, self.time_decay, self.time_first, key, value)
@@ -351,7 +362,7 @@ class RWKV(nn.Module):
         self.config.block_size = block_size
 
     @classmethod
-    def from_pretrained(cls, model_type,use_customized_cuda_kernel=True):
+    def from_pretrained(cls, model_type,use_customized_cuda_kernel=True,dtype="float16"):
         assert model_type in {
             'RWKV/rwkv-4-169m-pile',
             "RWKV/rwkv-4-430m-pile",
@@ -367,7 +378,8 @@ class RWKV(nn.Module):
         # init a huggingface/transformers model
         from transformers import RwkvForCausalLM,RwkvConfig
         hf_config = RwkvConfig.from_pretrained(model_type)
-        hf_model = RwkvForCausalLM.from_pretrained(model_type)
+        with CudaNotAvailable(): ## avoid HF load kernel
+            hf_model = RwkvForCausalLM.from_pretrained(model_type)
 
         # create a from-scratch initialized RWKV model
         config = {
@@ -376,10 +388,10 @@ class RWKV(nn.Module):
             "n_embd":hf_config.hidden_size,
             "intermediate_size":hf_config.intermediate_size,
             "use_customized_cuda_kernel":use_customized_cuda_kernel,
+            "dtype": dtype
         }
         config = RWKVConfig(**config)
         model = RWKV(config)
-
         num_layers = config.n_layer
         ## create mapping from the parameter name in RWKV to that of HF-RWKV
         mapping = {
@@ -405,7 +417,6 @@ class RWKV(nn.Module):
         for k1,k2 in mapping.items():
             assert sd[k1].shape == hf_sd[k2].shape,(k1,k2)
             sd[k1].copy_(hf_sd[k2])
-
         return model
 
     def configure_optimizers(self,weight_decay,learning_rate,betas,device_type):
@@ -482,6 +493,7 @@ class RWKV(nn.Module):
         return idx
 
     def load_cuda_kernel(self,dtype):
+        
         from torch.utils.cpp_extension import load
         T_MAX = 1024
         RWKV_FLOAT_MODE = dtype
