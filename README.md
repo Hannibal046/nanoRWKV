@@ -113,11 +113,11 @@ This is not a done project and there are a lot remaining:
 - [ ] A detailed and thorough jupyter notebook tutorial about RWKV.
 - [ ] More code comment in [modeling_rwkv.py](modeling_rwkv.py).
 - [x] RNN mode for inference [[HF Implementation]](https://github.com/huggingface/transformers/blob/main/src/transformers/models/rwkv/modeling_rwkv.py)
-- [ ] rescale parameters for inference [[reference]](https://github.com/BlinkDL/RWKV-LM/blob/cca1b5e8e597cf40675882bb10b46287c844e35c/RWKV-v4neo/src/model_run.py#L31)
+- [x] rescale parameters for inference [[reference]](https://github.com/BlinkDL/RWKV-LM/blob/cca1b5e8e597cf40675882bb10b46287c844e35c/RWKV-v4neo/src/model_run.py#L31)
 - [x] loading RWKV checkpoint for evaluation(may not comparable to GPT-2 due to different tokenizer) 
 - [ ] test bf16 training (Since V100 doesn't support bf16, your sponsorship of A100 for testing bf16 would be greatly appreciated :)
 - [ ] maybe scale up a little bit with DeepSpeed? Not sure, since nanoGPT didn't do this.
-- [ ] keep in line with the original implementaion of RWKV optimization. [[reference](https://github.com/BlinkDL/RWKV-LM/blob/cca1b5e8e597cf40675882bb10b46287c844e35c/RWKV-v4neo/src/model.py#L409)]
+- [ ] keep in line with the original implementaion of RWKV optimization. [[reference]](https://github.com/BlinkDL/RWKV-LM/blob/cca1b5e8e597cf40675882bb10b46287c844e35c/RWKV-v4neo/src/model.py#L409)
 - [ ] More analysis about RWKV in [scaling_laws.ipynb](scaling_laws.ipynb), [transformer_sizeing.ipynb](transformer_sizeing.ipynb)
 
 ## Reference

@@ -50,6 +50,7 @@ elif init_from.startswith('gpt2'):
     model = GPT.from_pretrained(init_from, dict(dropout=0.0))
 elif init_from.startswith("RWKV"):
     model = RWKV.from_pretrained(init_from,use_customized_cuda_kernel=False,dtype=dtype)
+    model.scale_parameters()
 
 model.eval()
 model.to(device)
@@ -88,9 +89,9 @@ if start.startswith('FILE:'):
     with open(start[5:], 'r', encoding='utf-8') as f:
         start = f.read()
 start_ids = encode(start)
-# x = (torch.tensor(start_ids, dtype=torch.long, device=device)[None, ...])
-x = torch.tensor(start_ids, dtype=torch.long, device=device)[None, ...].repeat(12,1)
-print(x.shape)
+x = (torch.tensor(start_ids, dtype=torch.long, device=device)[None, ...])
+# x = torch.tensor(start_ids, dtype=torch.long, device=device)[None, ...].repeat(12,1)
+
 # run generation
 with torch.no_grad():
     with ctx:

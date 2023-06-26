@@ -251,6 +251,7 @@ class RWKVConfig:
     intermediate_size: int = None # intermediate_size in channel-mixing
     use_customized_cuda_kernel: bool = True
     dtype: str = "float16" ## bfloat16 is not supported in V100
+    rescale_every: int = 6 ## mysterious trick, only applies when inference
 
 class RWKV(nn.Module):
 
@@ -375,8 +376,14 @@ class RWKV(nn.Module):
         x = self.rwkv.wte(idx)
         x = self.rwkv.ln_p(x)
         # x = self.rwkv.drop(x)
-        for block in self.rwkv.h:
+        for block_idx,block in enumerate(self.rwkv.h):
             x, state = block(x,state)
+            if state is not None: ## in generation mode
+                if (
+                    self.config.rescale_every > 0 
+                    and (block_idx + 1) % self.config.rescale_every == 0
+                ):
+                    x = x/2
         x = self.rwkv.ln_f(x)
 
         if targets is not None:
@@ -426,7 +433,7 @@ class RWKV(nn.Module):
             "n_embd":hf_config.hidden_size,
             "intermediate_size":hf_config.intermediate_size,
             "use_customized_cuda_kernel":use_customized_cuda_kernel,
-            "dtype": dtype
+            "dtype": dtype,
         }
         config = RWKVConfig(**config)
         model = RWKV(config)
@@ -514,12 +521,26 @@ class RWKV(nn.Module):
         
         return state
 
+    def scale_parameters(self):
+        if self.config.rescale_every > 0:
+            with torch.no_grad():
+                for block_id,block in enumerate(self.rwkv.h):
+                    block.attn.output_proj.weight.div_(2 ** int(block_id // self.config.rescale_every))
+                    block.ffn.value_proj.weight.div_(2 ** int(block_id // self.config.rescale_every))
+            self.scaled = True
+
+    def unscale_parameters(self):
+        if self.config.rescale_every > 0 and self.scaled:
+            with torch.no_grad():
+                for block_id,block in enumerate(self.rwkv.h):
+                    block.attn.output_proj.weight.mul_(2 ** int(block_id // self.config.rescale_every))
+                    block.ffn.value_proj.weight.mul_(2 ** int(block_id // self.config.rescale_every))
+
     @torch.no_grad()
     def generate(self, idx, max_new_tokens, temperature=1.0, top_k=None):
         """
         idx: (batch_size,seq_len)
         """
-
         batch_size,seq_len = idx.shape
         state = self.init_state(batch_size,idx.device)
         for seq_id in range(seq_len):
