@@ -208,7 +208,7 @@ elif init_from.startswith('gpt2'):
         model_args[k] = getattr(model.config, k)
 
 elif init_from.startswith('RWKV'):
-    model = RWKV.from_pretrained(init_from,dtype=dtype)
+    model = RWKV.from_pretrained(init_from,dtype=dtype,use_customized_cuda_kernel=use_customized_cuda_kernel)
     enc = tiktoken.get_encoding("gpt2")
     val_data_text = enc.decode(val_data)
     toker = AutoTokenizer.from_pretrained(init_from)

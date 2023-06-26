@@ -8,7 +8,7 @@ https://github.com/huggingface/transformers/blob/main/src/transformers/models/rw
 """
 
 
-import math
+import math,time
 import os
 import inspect
 from dataclasses import dataclass
@@ -16,6 +16,12 @@ from dataclasses import dataclass
 import torch
 import torch.nn as nn
 from torch.nn import functional as F
+
+PREV_X_TIME = 0
+NUM_STATE = 1
+DEN_STATE = 2
+MAX_STATE = 3
+PREV_X_CHANNEL = 4
 
 # copied from nanoGPT
 class LayerNorm(nn.Module):
@@ -55,8 +61,6 @@ class L2Wrap(torch.autograd.Function):
         gy.scatter_(-1, ids, maxx * factor)
         return (grad_output, gy)
 
-
-
 class ChannelMixing(nn.Module):
     def __init__(self,config,layer_id):
         super().__init__()
@@ -77,10 +81,14 @@ class ChannelMixing(nn.Module):
         self.time_mix_key        = nn.Parameter(torch.empty(1, 1, n_embd))
         self.time_mix_receptance = nn.Parameter(torch.empty(1, 1, n_embd))
 
-    def forward(self,x):
-        B, T, C = x.size() # x = (Batch,Time,Channel)
-        prev_x = self.time_shift(x)
-        
+    def forward(self,x,state=None):
+        # x = (Batch,Time,Channel)
+        if state is not None:
+            prev_x = state[self.layer_id,:,[PREV_X_CHANNEL],:]
+            state[self.layer_id,:,[PREV_X_CHANNEL],:] = x
+        else:
+            prev_x = self.time_shift(x)
+            
         ## R
         receptance = x * self.time_mix_receptance + prev_x * (1 - self.time_mix_receptance)
         receptance = self.receptance_proj(receptance)
@@ -95,7 +103,7 @@ class ChannelMixing(nn.Module):
 
         ## output
         out = receptance * value
-        return out
+        return out, state
         
 class TimeMixing(nn.Module):
     def __init__(self,config,layer_id):
@@ -120,50 +128,62 @@ class TimeMixing(nn.Module):
         self.time_mix_value      = nn.Parameter(torch.empty(1, 1, n_embd))
         self.time_mix_receptance = nn.Parameter(torch.empty(1, 1, n_embd))
     
-    def forward(self,x):
-        B, T, C = x.size() # x = (Batch,Time,Channel)
-        prev_x = self.time_shift(x)
+    def forward(self,x,state=None):
+        # x = (Batch,Time,Channel)
+        if state is not None:
+            prev_x = state[self.layer_id,:,[PREV_X_TIME],:]
+            state[self.layer_id,:,[PREV_X_TIME],:] = x
+        else:
+            prev_x = self.time_shift(x)
 
         # K
         key = x * self.time_mix_key + prev_x * (1 - self.time_mix_key)
         key = self.key_proj(key)
-
+        
         # V
         value = x * self.time_mix_value + prev_x * (1 - self.time_mix_value)
         value = self.value_proj(value)
-
+        
         # R
         receptance = x * self.time_mix_receptance + prev_x * (1 - self.time_mix_receptance)
         receptance = self.receptance_proj(receptance)
         receptance = F.sigmoid(receptance)
 
         # WKV
-        wkv  = self.wkv_function(key,value,use_customized_cuda_kernel=self.config.use_customized_cuda_kernel)
+        wkv, state  = self.wkv_function(key,value,use_customized_cuda_kernel=self.config.use_customized_cuda_kernel,state=state)
         
         # RWKV
         rwkv = receptance * wkv
         rwkv = self.output_proj(rwkv)
         
-        return rwkv
+        return rwkv, state
 
 
     def wkv_function(self,key,value,use_customized_cuda_kernel,state=None):
 
         ## essentially, this customized cuda kernel delivers a faster for loop across time steps
+        ## only for training and evaluating loss and ppl
         if state is None and use_customized_cuda_kernel:
             B, T, C = key.size()
-            return WKVKernel.apply(B, T, C, self.time_decay, self.time_first, key, value)
+            return WKVKernel.apply(B, T, C, self.time_decay, self.time_first, key, value), None
         
         ## raw wkv function (from Huggingface Implementation)
+        ## only for generation
         else:    
             _, seq_length, _ = key.size()
             output = torch.zeros_like(key)
+
+            debug_mode = False
             if state is None:
+                ## only for debug purpose when use_customized_cuda_kernel=False and state is None
+                debug_mode = True
                 num_state = torch.zeros_like(key[:, 0], dtype=torch.float32)
                 den_state = torch.zeros_like(key[:, 0], dtype=torch.float32)
                 max_state = torch.zeros_like(key[:, 0], dtype=torch.float32) - 1e38
             else:
-                num_state, den_state, max_state = state
+                num_state  = state[self.layer_id,:,NUM_STATE,:]
+                den_state  = state[self.layer_id,:,DEN_STATE,:]
+                max_state  = state[self.layer_id,:,MAX_STATE,:]
 
             time_decay = -torch.exp(self.time_decay)
 
@@ -186,11 +206,16 @@ class TimeMixing(nn.Module):
                 num_state = e1 * num_state + e2 * current_value
                 den_state = e1 * den_state + e2
                 max_state = max_for_state
+            
+            if debug_mode:
+                return output, None
 
-            # if return_state or state is not None:
-            #     state = [num_state, den_state, max_state]
+            else:
+                state[self.layer_id,:,NUM_STATE,:] = num_state
+                state[self.layer_id,:,DEN_STATE,:] = den_state
+                state[self.layer_id,:,MAX_STATE,:] = max_state
 
-            return output#, state
+                return output, state
 
 class Block(nn.Module):
 
@@ -201,10 +226,20 @@ class Block(nn.Module):
         self.ln_2 = LayerNorm(config.n_embd, bias=config.bias)
         self.ffn = ChannelMixing(config,layer_id)
 
-    def forward(self, x):
-        x = x + self.attn(self.ln_1(x))
-        x = x + self.ffn(self.ln_2(x))
-        return x
+    def forward(self, x, state = None):
+        # state: [batch_size, 5 , n_embd]
+        
+        # time mixing
+        residual = x
+        x,state = self.attn(self.ln_1(x),state=state)
+        x = x + residual
+        
+        # channel mixing
+        residual = x
+        x, state = self.ffn(self.ln_2(x),state=state)
+        x = x + residual
+
+        return x, state
 
 @dataclass
 class RWKVConfig:
@@ -225,7 +260,6 @@ class RWKV(nn.Module):
         assert config.block_size is not None
         self.config = config
         self.lr_init = lr_init ## used to initialize embedding parameters
-
         self.rwkv = nn.ModuleDict(dict(
             wte = nn.Embedding(config.vocab_size, config.n_embd),
             ln_p = LayerNorm(config.n_embd, bias=config.bias),
@@ -332,7 +366,8 @@ class RWKV(nn.Module):
             else:
                 nn.init.orthogonal_(weight, gain=gain * scale)
                 
-    def forward(self, idx, targets=None,):
+    def forward(self, idx, targets=None, state=None, return_state=False):
+        
         device = idx.device
         b, t = idx.size()
         assert t <= self.config.block_size, f"Cannot forward sequence of length {t}, block size is only {self.config.block_size}"
@@ -341,7 +376,7 @@ class RWKV(nn.Module):
         x = self.rwkv.ln_p(x)
         # x = self.rwkv.drop(x)
         for block in self.rwkv.h:
-            x = block(x)
+            x, state = block(x,state)
         x = self.rwkv.ln_f(x)
 
         if targets is not None:
@@ -354,8 +389,11 @@ class RWKV(nn.Module):
             # inference-time mini-optimization: only forward the lm_head on the very last position
             logits = self.lm_head(x[:, [-1], :]) # note: using list [-1] to preserve the time dim
             loss = None
-
-        return logits, loss
+        
+        if return_state:
+            return logits, loss, state
+        else:
+            return logits, loss
 
     def crop_block_size(self, block_size):
         assert block_size <= self.config.block_size
@@ -465,18 +503,29 @@ class RWKV(nn.Module):
         mfu = flops_achieved / flops_promised
         return mfu
 
+    def init_state(self,batch_size,device):
+
+        n_state = len([PREV_X_TIME,NUM_STATE,DEN_STATE,MAX_STATE,PREV_X_CHANNEL])
+        state = torch.zeros(
+            (self.config.n_layer,batch_size,n_state,self.config.n_embd),
+            dtype=torch.float32, device=device,
+        )
+        state[:,:,MAX_STATE,:] -= 1e30
+        
+        return state
+
     @torch.no_grad()
     def generate(self, idx, max_new_tokens, temperature=1.0, top_k=None):
         """
-        Take a conditioning sequence of indices idx (LongTensor of shape (b,t)) and complete
-        the sequence max_new_tokens times, feeding the predictions back into the model each time.
-        Most likely you'll want to make sure to be in model.eval() mode of operation for this.
+        idx: (batch_size,seq_len)
         """
-        for _ in range(max_new_tokens):
-            # if the sequence context is growing too long we must crop it at block_size
-            idx_cond = idx if idx.size(1) <= self.config.block_size else idx[:, -self.config.block_size:]
-            # forward the model to get the logits for the index in the sequence
-            logits, _ = self(idx_cond)
+
+        batch_size,seq_len = idx.shape
+        state = self.init_state(batch_size,idx.device)
+        for seq_id in range(seq_len):
+            logits, _, state = self(idx[:,[seq_id]], state = state, return_state=True)
+        
+        for _ in range(max_new_tokens):    
             # pluck the logits at the final step and scale by desired temperature
             logits = logits[:, -1, :] / temperature
             # optionally crop the logits to only the top k options
@@ -489,7 +538,7 @@ class RWKV(nn.Module):
             idx_next = torch.multinomial(probs, num_samples=1)
             # append sampled index to the running sequence and continue
             idx = torch.cat((idx, idx_next), dim=1)
-
+            logits, _, state = self(idx_next, state=state, return_state=True)
         return idx
 
     def load_cuda_kernel(self,dtype):
@@ -508,11 +557,10 @@ class RWKV(nn.Module):
                     assert T <= T_MAX
                     assert B * C % min(C, 32) == 0
                     w = -torch.exp(w.float().contiguous())
-                    u = u.contiguous()
+                    u = u.contiguous().bfloat16()
                     k = k.contiguous()
                     v = v.contiguous()
                     y = torch.empty((B, T, C), device=w.device, memory_format=torch.contiguous_format, dtype=torch.bfloat16)
-                    # print(w.dtype,u.dtype)
                     wkv_cuda.forward(B, T, C, w, u, k, v, y)
                     ctx.save_for_backward(w, u, k, v, y)
                     return y

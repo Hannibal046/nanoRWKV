@@ -7,6 +7,7 @@ from contextlib import nullcontext
 import torch
 import tiktoken
 from modeling_gpt import GPTConfig, GPT
+from modeling_rwkv import RWKV,RWKVConfig
 
 # -----------------------------------------------------------------------------
 init_from = 'resume' # either 'resume' (from an out_dir) or a gpt2 variant (e.g. 'gpt2-xl')
@@ -47,6 +48,8 @@ if init_from == 'resume':
 elif init_from.startswith('gpt2'):
     # init from a given GPT-2 model
     model = GPT.from_pretrained(init_from, dict(dropout=0.0))
+elif init_from.startswith("RWKV"):
+    model = RWKV.from_pretrained(init_from,use_customized_cuda_kernel=False,dtype=dtype)
 
 model.eval()
 model.to(device)
@@ -66,20 +69,28 @@ if load_meta:
     stoi, itos = meta['stoi'], meta['itos']
     encode = lambda s: [stoi[c] for c in s]
     decode = lambda l: ''.join([itos[i] for i in l])
-else:
+elif init_from.startswith("gpt2"):
     # ok let's assume gpt-2 encodings by default
     print("No meta.pkl found, assuming GPT-2 encodings...")
     enc = tiktoken.get_encoding("gpt2")
     encode = lambda s: enc.encode(s, allowed_special={"<|endoftext|>"})
     decode = lambda l: enc.decode(l)
+elif init_from.startswith("RWKV"):
+    print("No meta.pkl found, assuming RWKV encodings...")
+    from transformers import AutoTokenizer
+    os.environ["TOKENIZERS_PARALLELISM"] = "false"
+    toker = AutoTokenizer.from_pretrained(init_from)
+    encode = lambda s:toker.encode(s)
+    decode = lambda s:toker.decode(s)
 
 # encode the beginning of the prompt
 if start.startswith('FILE:'):
     with open(start[5:], 'r', encoding='utf-8') as f:
         start = f.read()
 start_ids = encode(start)
-x = (torch.tensor(start_ids, dtype=torch.long, device=device)[None, ...])
-
+# x = (torch.tensor(start_ids, dtype=torch.long, device=device)[None, ...])
+x = torch.tensor(start_ids, dtype=torch.long, device=device)[None, ...].repeat(12,1)
+print(x.shape)
 # run generation
 with torch.no_grad():
     with ctx:
