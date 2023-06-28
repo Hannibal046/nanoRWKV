@@ -417,6 +417,7 @@ class RWKV(nn.Module):
             "RWKV/rwkv-raven-7b",
             "RWKV/rwkv-raven-1b5",
             "RWKV/rwkv-raven-3b",
+            "RWKV/rwkv-4-14b-pile",
             }
         print("loading weights from pretrained RWKV: %s" % model_type)
                 

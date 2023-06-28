@@ -31,9 +31,9 @@ We would recommend using [Conda](https://www.anaconda.com) to manage the environ
 ```
 conda create -n nanoRWKV python=3.8 
 conda activate nanoRWKV
-## replace * with your driver version
-conda install cuda -c nvidia/label/cuda-11.*.0 
 pip install torch numpy transformers datasets tiktoken wandb tqdm ninja
+## replace * with your driver version if loading kernel failed
+# conda install cuda -c nvidia/label/cuda-11.*.0
 ```
 ## Prerequisites
 Before kicking off this project, make sure you are familiar with the following concepts:
@@ -82,10 +82,10 @@ python train.py config/eval_rwkv4_{169m|430m|1b5|3b}.py
 python train.py config/eval_gpt2{|_medium|_large|_xl}.py
 ```
 and observe the following losses on val set:
-|    model   | RWKV |      |      |      | GPT-2 |      |      |      |
-|:----------:|:----:|:----:|:----:|:----:|:-----:|:----:|:----:|:----:|
-| parameters | 169M | 430M | 1.5B |  3B  |  124M | 350M | 774M | 1.5B |
-|  val loss  | 3.11 | 2.79 | 2.54 | 2.42 |  3.11 | 2.82 | 2.66 | 2.56 |
+|    model   | RWKV |      |      |      |      |      | GPT-2 |      |      |      |
+|:----------:|:----:|:----:|:----:|:----:|------|------|:-----:|:----:|:----:|:----:|
+| parameters | 169M | 430M | 1.5B |  3B  | 7B   | 14B  |  124M | 350M | 774M | 1.5B |
+|  val loss  | 3.11 | 2.79 | 2.54 | 2.42 | 2.32 | 2.23 |  3.11 | 2.82 | 2.66 | 2.56 |
 
 Notice that both models are not trained in the openwebtext (RWKV in The Pile and OpenAI GPT-2 in private WebText), so they could be further improved due to dataset domain gap.
 
@@ -110,6 +110,7 @@ model=RWKV/rwkv-4-{model_type}-pile
 This is not a done project and there are a lot remaining:
 
 - [ ] Doule check the correctness of the current implementation (need help).
+- [ ] benchmark generation speed and memory usage.
 - [ ] A detailed and thorough jupyter notebook tutorial about RWKV.
 - [ ] More code comment in [modeling_rwkv.py](modeling_rwkv.py).
 - [x] RNN mode for inference [[HF Implementation]](https://github.com/huggingface/transformers/blob/main/src/transformers/models/rwkv/modeling_rwkv.py)
