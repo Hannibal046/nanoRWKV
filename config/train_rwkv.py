@@ -15,12 +15,13 @@ gradient_accumulation_steps = 5 * 8
 # rwkv specific parameters
 dtype = 'float16' # v100 doesn't support bf16
 model_type = 'rwkv'
-beta1 = 0.9
-beta2 = 0.99
+# beta1 = 0.9
+# beta2 = 0.99
 # learning_rate = 8e-4
 # min_lr = 1e-5
 # warmup_iters = 0
-weight_decay = 0
+
+weight_decay = 1e-1
 use_customized_cuda_kernel = True
 
 # this makes total number of tokens be 300B

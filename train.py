@@ -163,8 +163,6 @@ elif model_type == 'rwkv':
     LLMConfig = RWKVConfig
     model_args = dict(n_layer=n_layer, n_embd=n_embd, block_size=block_size,
                   bias=bias, vocab_size=None, dtype=dtype,use_customized_cuda_kernel=use_customized_cuda_kernel) # start with model_args from command line
-    
-    # init_from = 'scratch'
 
 if init_from == 'scratch':
     # init a new model from scratch
@@ -173,8 +171,7 @@ if init_from == 'scratch':
     if meta_vocab_size is None:
         print("defaulting to vocab_size of GPT-2 to 50304 (50257 rounded up for efficiency)")
     model_args['vocab_size'] = meta_vocab_size if meta_vocab_size is not None else 50304
-    gptconf = LLMConfig(**model_args)
-    model = LLM(gptconf)
+    model = LLM(LLMConfig(**model_args))
 elif init_from == 'resume':
     print(f"Resuming training from {out_dir}")
     # resume training from a checkpoint.

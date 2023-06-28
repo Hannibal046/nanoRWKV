@@ -3,7 +3,7 @@
 # $ torchrun --standalone --nproc_per_node=8 train.py config/train_gpt2.py
 
 wandb_log = True
-wandb_project = 'owt'
+wandb_project = 'nanoRWKV'
 wandb_run_name='gpt2-124M'
 
 # these make the total batch size be ~0.5M
@@ -15,6 +15,7 @@ gradient_accumulation_steps = 5 * 8
 # this makes total number of tokens be 300B
 max_iters = 600000
 lr_decay_iters = 600000
+dtype = 'float16'
 
 # eval stuff
 eval_interval = 1000
