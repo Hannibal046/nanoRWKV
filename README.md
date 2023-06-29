@@ -3,9 +3,9 @@
 
 > The [nanoGPT](https://github.com/karpathy/nanoGPT)-style implementation of [RWKV Language Model](https://www.rwkv.com) - a RNN with GPT-level LLM performance.
 
-This is a rewrite of [RWKV-v4neo](https://github.com/BlinkDL/RWKV-LM/tree/main/RWKV-v4neo) and [HuggingFace Implementation](https://github.com/huggingface/transformers/blob/main/src/transformers/models/rwkv/modeling_rwkv.py) that aims to create a clean code base of RWKV for head-to-head comparison with GPT-series, while keeping in line with the simplicity and practicality of nanoGPT. So it could be used to train a GPT or RWKV model in this single repository. 
+This is a rewrite of [RWKV-v4neo](https://github.com/BlinkDL/RWKV-LM/tree/main/RWKV-v4neo) and [HuggingFace Implementation](https://github.com/huggingface/transformers/blob/main/src/transformers/models/rwkv/modeling_rwkv.py) that aims to create a clean code base of RWKV for head-to-head comparison with GPT-series, while keeping in line with the simplicity and practicality of nanoGPT. This single repository can be utilized for training both GPT and RWKV models.
 
-It is still an active project and we are training a RWKV model (130M) with similar size to GPT-2 (124M) on OpenWebText dataset on a single 8*V100 32GB node. To keep track of the **ongoing** experiments, please see this [wandb project](https://wandb.ai/hannibal046/nanoRWKV?workspace=user-hannibal046).
+As an active project, we are currently training a RWKV model (130M) comparable in size to GPT-2 (124M) using the OpenWebText dataset on a single 8*V100 32GB node. To follow the progress of **ongoing** experiments, please refer to this [wandb project](https://wandb.ai/hannibal046/nanoRWKV?workspace=user-hannibal046).
 
 ![nanoGPT](assets/current_loss.png)
 
@@ -44,9 +44,8 @@ Before kicking off this project, make sure you are familiar with the following c
 - **RWKV Language Model**: an RNN with GPT-level LLM performance, which can also be directly trained like a GPT transformer (parallelizable). The model is created by an independent researcher [Bo Peng](https://twitter.com/BlinkDL_AI). Get more information [here](https://www.rwkv.com).
 
 ## Tutorial
-```
-To-do
-```
+We would present a step-by-step tutorial of building RWKV in a jupyter notebook.
+
 ## Reproduction
 
 After all set up, let's build RWKV - first tokenize the dataset (OpenWebText):
@@ -78,7 +77,7 @@ We got the results as follows (check the progress on this [wandb project](https:
 
 Existing OpenAI GPT-2 checkpoints and RWKV checkpoints allow us to get some baselines in place for openwebtext. We can get the numbers as follows:
 ```
-python train.py config/eval_rwkv4_{169m|430m|1b5|3b}.py
+python train.py config/eval_rwkv4_{169m|430m|1b5|3b|7b|14b}.py
 python train.py config/eval_gpt2{|_medium|_large|_xl}.py
 ```
 and observe the following losses on val set:
