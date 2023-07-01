@@ -519,16 +519,15 @@ class RWKV(nn.Module):
         return optimizer
 
     def estimate_mfu(self, fwdbwd_per_iter, dt):
-        ## since RWKV is not a Transformer-based model, MFU is not applicable here
-        return -1
         """ estimate model flops utilization (MFU) in units of A100 bfloat16 peak FLOPS """
         # first estimate the number of flops we do per iteration.
-        # see PaLM paper Appendix B as ref: https://arxiv.org/abs/2204.02311
-        N = self.get_num_params()
+        # see RWKV paper Appendix C as ref: https://arxiv.org/abs/2305.13048
         cfg = self.config
-        L, H, Q, T = cfg.n_layer, cfg.n_head, cfg.n_embd//cfg.n_head, cfg.block_size
-        flops_per_token = 6*N + 12*L*H*Q*T
-        flops_per_fwdbwd = flops_per_token * T
+        L, V, D = cfg.n_layer, cfg.vocab_size, cfg.n_embd
+        # Note there is a typo in the RWKV paper. Forward pass is 2*fn, forward
+        # and backward is 6*fn.
+        flops_per_token = 2*(V*D + 13*(V**2)*L)
+        flops_per_fwdbwd = 3*flops_per_token
         flops_per_iter = flops_per_fwdbwd * fwdbwd_per_iter
         # express our flops throughput as ratio of A100 bfloat16 peak flops
         flops_achieved = flops_per_iter * (1.0/dt) # per second
