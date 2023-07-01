@@ -531,7 +531,13 @@ class RWKV(nn.Module):
         flops_per_iter = flops_per_fwdbwd * fwdbwd_per_iter
         # express our flops throughput as ratio of A100 bfloat16 peak flops
         flops_achieved = flops_per_iter * (1.0/dt) # per second
-        flops_promised = 312e12 # A100 GPU bfloat16 peak flops is 312 TFLOPS
+        # https://www.nvidia.com/content/dam/en-zz/Solutions/Data-Center/a100/pdf/nvidia-a100-datasheet.pdf
+        if cfg.dtype == 'bfloat16':
+            flops_promised = 312e12 # A100 GPU bfloat16 peak flops is 312 TFLOPS
+        elif cfg.dtype == 'float16':
+            flops_promised = 312e12 # A100 GPU float16 peak flops is 312 TFLOPS
+        else: #dtype == float32
+            flops_promised = 19.5e12 # A100 GPU float32 peak flops is 19.5 TFLOPS
         mfu = flops_achieved / flops_promised
         return mfu
 
