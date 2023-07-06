@@ -1,18 +1,11 @@
-from pathlib import Path
-
-import pandas as pd
+import os
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
 from torch.profiler import ProfilerActivity, profile, record_function
-from tqdm.auto import tqdm
-from transformers import AutoModelForCausalLM, AutoTokenizer, LogitsProcessorList
+from transformers import AutoModelForCausalLM, AutoTokenizer
 from torch import nn
 import torch
-from time import sleep
-import gc
-
-# DATA_PATH = Path(__file__).parent / '../data'
-DATA_PATH = Path("") / 'data'
-
-LOGITS_PROCESSOR = LogitsProcessorList()
+import json
+from argparse import ArgumentParser
 
 def sample(outputs):
     next_token_logits = outputs.logits[:, -1, :]
@@ -20,89 +13,109 @@ def sample(outputs):
     next_tokens = torch.multinomial(probs, num_samples=1).squeeze(1)
     return next_tokens
 
-devices = ['cuda'] # , 'cpu']
-recompute_all_models = True
-models = [
-    # Bloom
-    # "EleutherAI/gpt-neo-125m",
-    # "facebook/opt-125m",
-    # "EleutherAI/pythia-160m",
-    # "facebook/opt-350m",
-    # "EleutherAI/pythia-410m",
-    # "bigscience/bloom-560m",
+if __name__ == "__main__":
+    parser = ArgumentParser()
+    parser.add_argument("--device",default='cuda')
+    parser.add_argument("--model",required=True)
+    parser.add_argument("--use_cache",action='store_true')
+    parser.add_argument("--max_new_tokens",type=int,default=16_000)
+    parser.add_argument("--output_path")
+    args = parser.parse_args()
 
-    # # OPT 
-    # "facebook/opt-1.3b",
-    # "bigscience/bloom-1b7",
-    # "EleutherAI/gpt-neo-1.3B",
-    # "EleutherAI/pythia-1.4b",
+    prompt = 'hello' ## dummpy input
+    torch.set_float32_matmul_precision('high')
+    
+    is_rwkv = 'rwkv' in args.model.lower()
+    if is_rwkv:
+        model = AutoModelForCausalLM.from_pretrained(args.model)
+    else:
+        model = AutoModelForCausalLM.from_pretrained(args.model,max_position_embeddings=(args.max_new_tokens+10),ignore_mismatched_sizes=True)
+    model.eval()
+    model = model.to(args.device)
+    model = torch.compile(model)
+    model_size = sum(p.numel() for p in model.parameters())
+    tokenizer = AutoTokenizer.from_pretrained(args.model)
+    tokenized_prompt = tokenizer(prompt, return_tensors="pt")
+    tokenized_prompt = tokenized_prompt['input_ids'].to(args.device)            
 
-    # # GPT-NEO
-    # "facebook/opt-2.7b",
-    # "EleutherAI/gpt-neo-2.7B",
-    # "EleutherAI/pythia-2.8b",
-    # "bigscience/bloom-3b",
+    model_input = {
+        "input_ids":tokenized_prompt,
+        "use_cache":args.use_cache,
+    }
 
-    # # pythia
-    # "facebook/opt-6.7b",
-    "EleutherAI/pythia-6.9b",
-    # "facebook/opt-13b",
-    # "EleutherAI/pythia-12b",
+    cache_name = "state" if args.model.startswith("RWKV") else "past_key_values"
+    model_input[cache_name]=None
 
-]
-num_tokens = 1024
-num_samples = 1
-prompt = '\nIn a shocking finding, scientist discovered a herd of dragons living in a remote, previously unexplored valley, in Tibet. Even more surprising to the researchers was the fact that the dragons spoke perfect Chinese.'
+    os.makedirs(os.path.dirname(args.output_path),exist_ok=True)
+    writer = open(args.output_path,'w')
+    for tok_idx in range(args.max_new_tokens):
+        with torch.no_grad():
+            if args.use_cache and model_input[cache_name] is not None:model_input["input_ids"] = tokenized_prompt[:,-1:]
+            else:model_input["input_ids"] = tokenized_prompt
+            with profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA], profile_memory=True, record_shapes=False) as prof:
+                with record_function("model_inference"):
+                    output = model.forward(**model_input)
 
-data = []
-if (DATA_PATH / 'inference_results_hf.csv').exists() and not recompute_all_models:
-    data = pd.read_csv(DATA_PATH / 'inference_results_hf.csv').to_dict('records')
+        model_input[cache_name]=getattr(output,cache_name)
+        next_tokens = sample(output)
+        tokenized_prompt = torch.cat([tokenized_prompt, next_tokens[:, None]], dim=-1)
+        
+        full_profile = next(event for event in prof.key_averages() if event.key == 'model_inference')
+        writer.write(json.dumps({
+            "model_name": args.model,
+            "model_size": model_size,
+            "token_id": tok_idx,
+            "strategy": args.device,
+            "cpu_time": full_profile.cpu_time,
+            "cuda_time": full_profile.cuda_time,
+            "cpu_memory_usage": full_profile.cpu_memory_usage,
+            "cuda_memory_usage": full_profile.cuda_memory_usage,
+            "self_cpu_memory_usage": full_profile.self_cpu_memory_usage,
+            "self_cuda_memory_usage": full_profile.self_cuda_memory_usage,
+            "max_memory_allocated":torch.cuda.max_memory_allocated(),
+        })+'\n'
+        )
+        torch.cuda.empty_cache()
 
-for device in devices:
-    for model_name in tqdm(models):
-        print(model_name)
-        if any(d["model_name"] == model_name and d["strategy"] == device for d in data): 
-            continue
+    writer.close()
 
-        try:
-            model = AutoModelForCausalLM.from_pretrained(model_name)
-            model = model.to(device)
+"""
+python benchmark_inference_time.py --model RWKV/rwkv-4-3b-pile --use_cache --output_path data/inference_time/rwkv-3b.jsonl
+python benchmark_inference_time.py --model RWKV/rwkv-4-7b-pile --use_cache --output_path data/inference_time/rwkv-7b.jsonl
+python benchmark_inference_time.py --model RWKV/rwkv-4-14b-pile --use_cache --output_path data/inference_time/rwkv-14b.jsonl
+python benchmark_inference_time.py --model facebook/opt-2.7b --use_cache --output_path data/inference_time/opt-2.7b.jsonl
+python benchmark_inference_time.py --model facebook/opt-6.7b --use_cache --output_path data/inference_time/opt-6.7b.jsonl
+python benchmark_inference_time.py --model EleutherAI/pythia-2.8b --use_cache --output_path data/inference_time/pythia-2.8b.jsonl
+python benchmark_inference_time.py --model EleutherAI/pythia-6.9b --use_cache --output_path data/inference_time/pythia-6.9b.jsonl
+python benchmark_inference_time.py --model EleutherAI/gpt-neo-2.7B --use_cache --output_path data/inference_time/gpt-neo-2.7B.jsonl
 
-            model_size = sum(p.numel() for p in model.parameters())
+############# Poltting Code ##############
+import json
+def get_jsonl(f): return [json.loads(x) for x in open(f).readlines()]
+import matplotlib.pyplot as plt
+fig, (ax1,ax2) = plt.subplots(1, 2,figsize=(12, 4))
 
-            tokenizer = AutoTokenizer.from_pretrained(model_name)
-            tokenized_prompt = tokenizer(prompt, return_tensors="pt")
-            tokenized_prompt = tokenized_prompt['input_ids'].to(device)
+for model_name in [
+    "rwkv-3b",
+    "opt-2.7b",
+    "gpt-neo-2.7B",
+    "pythia-2.8b"
+    ]:
+    data = get_jsonl(f"data/inference_time/{model_name}.jsonl")
+    cuda_time = [x['cuda_time'] for x in data]
+    cumulative_time = [sum(cuda_time[:idx+1])/(1000*1000) for idx in range(len(cuda_time))]
+    ax1.plot([x/1000 for x in cuda_time][100:],label=model_name)
+    ax2.plot(cumulative_time,label=model_name)
 
-            for tok_idx in range(num_tokens):
-                with profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA], profile_memory=True, record_shapes=False) as prof:
-                    with record_function("model_inference"):
-                        tokens = model.forward(tokenized_prompt)
+ax1.set_xlabel("# Tokens")
+ax1.set_ylabel("Time (ms) to generated the #-th token")
+ax1.grid()
+ax1.legend()
+ax1.set_title("Single Token Generation Latency")
 
-                full_profile = next(event for event in prof.key_averages() if event.key == 'model_inference')
-                next_tokens = sample(tokens)
-                tokenized_prompt = torch.cat([tokenized_prompt, next_tokens[:, None]], dim=-1)
-                gen_text = tokenizer.decode(tokenized_prompt[0])
-                data.append({
-                    "model_name": model_name,
-                    "model_size": model_size,
-                    "token_id": tok_idx,
-                    "final_text": gen_text,
-                    "strategy": device,
-                    "cpu_time": full_profile.cpu_time,
-                    "cuda_time": full_profile.cuda_time,
-                    "cpu_memory_usage": full_profile.cpu_memory_usage,
-                    "cuda_memory_usage": full_profile.cuda_memory_usage,
-                    "self_cpu_memory_usage": full_profile.self_cpu_memory_usage,
-                    "self_cuda_memory_usage": full_profile.self_cuda_memory_usage
-                })
-
-                pd.DataFrame(data).to_csv(DATA_PATH / f'inference_results_hf.csv')
-
-        except:
-            print(f"FAILED AT LOADING {model_name}")
-    else: 
-        del model
-        gc.collect()
-        torch.cuda.empty_cache() 
-        continue
+ax2.set_xlabel("# Tokens")
+ax2.set_ylabel("Cumulative time (s) to generated the #-th token")
+ax2.grid()
+ax2.legend()
+ax2.set_title("Cumulative Generation Latency")
+"""

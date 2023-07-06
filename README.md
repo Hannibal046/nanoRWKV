@@ -9,6 +9,12 @@ As an active project, we are currently training a RWKV model (130M) comparable i
 
 ![nanoGPT](assets/current_loss.png)
 
+RWKV is essentially an RNN with unrivaled advantage when doing inference. Here we benchmark the speed and space occupation of RWKV, along with its Transformer counterpart (code could be found [here](https://github.com/Hannibal046/nanoRWKV/blob/main/benchmark_inference_time.py)). We could easily find:
+- single token generation latency and memory consumption of RWKV is an constant.
+- overall latency of RWKV is linear.
+
+![inference-time](assets/inference-time.png)
+
 ## Table of Contents  
 We organize this project as follows:
 - [Installation](#installation)

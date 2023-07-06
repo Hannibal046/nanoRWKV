@@ -15,3 +15,7 @@ test.py
 pretrained_models
 plm
 transformers
+inference_time
+BlinkDL*
+20B_tokenizer*
+test.sh
