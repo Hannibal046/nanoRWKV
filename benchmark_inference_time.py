@@ -50,15 +50,15 @@ if __name__ == "__main__":
     writer = open(args.output_path,'w')
     for tok_idx in range(args.max_new_tokens):
         with torch.no_grad():
-            if args.use_cache and model_input[cache_name] is not None:model_input["input_ids"] = tokenized_prompt[:,-1:]
-            else:model_input["input_ids"] = tokenized_prompt
+            if args.use_cache and model_input[cache_name] is not None:model_input["input_ids"] = tokenized_prompt[:,-1:].to(args.device)
+            else:model_input["input_ids"] = tokenized_prompt.to(args.device)
             with profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA], profile_memory=True, record_shapes=False) as prof:
                 with record_function("model_inference"):
                     output = model.forward(**model_input)
 
         model_input[cache_name]=getattr(output,cache_name)
         next_tokens = sample(output)
-        tokenized_prompt = torch.cat([tokenized_prompt, next_tokens[:, None]], dim=-1)
+        tokenized_prompt = torch.cat([tokenized_prompt.cpu(), next_tokens[:, None].cpu()], dim=-1)
         
         full_profile = next(event for event in prof.key_averages() if event.key == 'model_inference')
         writer.write(json.dumps({
