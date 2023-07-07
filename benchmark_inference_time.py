@@ -4,6 +4,7 @@ from torch.profiler import ProfilerActivity, profile, record_function
 from transformers import AutoModelForCausalLM, AutoTokenizer, AutoConfig
 from torch import nn
 import torch
+torch.set_float32_matmul_precision('high')
 import json
 from argparse import ArgumentParser
 
@@ -23,16 +24,10 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     prompt = 'hello' ## dummpy input
-    torch.set_float32_matmul_precision('high')
-    
-    is_rwkv = 'rwkv' in args.model.lower()
-    if is_rwkv:
-        model = AutoModelForCausalLM.from_pretrained(args.model)
-    else:
-        # model = AutoModelForCausalLM.from_pretrained(args.model,max_position_embeddings=(args.max_new_tokens+10),ignore_mismatched_sizes=True)
-        config = AutoConfig.from_pretrained(args.model)
-        config.max_position_embeddings = args.max_new_tokens+10
-        model = AutoModelForCausalLM.from_config(config)
+
+    config = AutoConfig.from_pretrained(args.model)
+    config.max_position_embeddings = args.max_new_tokens+10
+    model = AutoModelForCausalLM.from_config(config)
     model.eval()
     model = model.to(args.device)
     model = torch.compile(model)
@@ -93,22 +88,27 @@ python benchmark_inference_time.py --model EleutherAI/pythia-6.9b --use_cache --
 python benchmark_inference_time.py --model EleutherAI/gpt-neo-2.7B --use_cache --output_path data/inference_time/gpt-neo-2.7B.jsonl
 
 ############# Poltting Code ##############
+import numpy as np
 import json
 def get_jsonl(f): return [json.loads(x) for x in open(f).readlines()]
 import matplotlib.pyplot as plt
-fig, (ax1,ax2) = plt.subplots(1, 2,figsize=(12, 4))
+fig, (ax1,ax2,ax3) = plt.subplots(1, 3,figsize=(18, 4))
 
 for model_name in [
     "rwkv-3b",
+    # "rwkv-7b",
+    # "rwkv-14b",
     "opt-2.7b",
     "gpt-neo-2.7B",
     "pythia-2.8b"
     ]:
     data = get_jsonl(f"data/inference_time/{model_name}.jsonl")
     cuda_time = [x['cuda_time'] for x in data]
-    cumulative_time = [sum(cuda_time[:idx+1])/(1000*1000) for idx in range(len(cuda_time))]
+    cumulative_time = np.cumsum(cuda_time)/(1000*1000)
+    memory_usage = [x['max_memory_allocated']/(2**10)/(2**10)/(2**10) for x in data]
     ax1.plot([x/1000 for x in cuda_time][100:],label=model_name)
     ax2.plot(cumulative_time,label=model_name)
+    ax3.plot(memory_usage,label=model_name)
 
 ax1.set_xlabel("# Tokens")
 ax1.set_ylabel("Time (ms) to generated the #-th token")
@@ -121,4 +121,10 @@ ax2.set_ylabel("Cumulative time (s) to generated the #-th token")
 ax2.grid()
 ax2.legend()
 ax2.set_title("Cumulative Generation Latency")
+
+ax3.set_xlabel("# Tokens")
+ax3.set_ylabel("Memory usage (GB)")
+ax3.grid()
+ax3.legend()
+ax3.set_title("Memory usage in Generation")
 """
