@@ -1,7 +1,7 @@
 import os
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 from torch.profiler import ProfilerActivity, profile, record_function
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer, AutoConfig
 from torch import nn
 import torch
 import json
@@ -29,7 +29,10 @@ if __name__ == "__main__":
     if is_rwkv:
         model = AutoModelForCausalLM.from_pretrained(args.model)
     else:
-        model = AutoModelForCausalLM.from_pretrained(args.model,max_position_embeddings=(args.max_new_tokens+10),ignore_mismatched_sizes=True)
+        # model = AutoModelForCausalLM.from_pretrained(args.model,max_position_embeddings=(args.max_new_tokens+10),ignore_mismatched_sizes=True)
+        config = AutoConfig.from_pretrained(args.model)
+        config.max_position_embeddings = args.max_new_tokens+10
+        model = AutoModelForCausalLM.from_config(config)
     model.eval()
     model = model.to(args.device)
     model = torch.compile(model)
