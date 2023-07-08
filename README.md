@@ -5,8 +5,6 @@
 
 This is a rewrite of [RWKV-v4neo](https://github.com/BlinkDL/RWKV-LM/tree/main/RWKV-v4neo) and [HuggingFace Implementation](https://github.com/huggingface/transformers/blob/main/src/transformers/models/rwkv/modeling_rwkv.py) that aims to create a clean code base of RWKV for head-to-head comparison with GPT-series, while keeping in line with the simplicity and practicality of nanoGPT. This single repository can be utilized for training both GPT and RWKV models.
 
-As an active project, we are currently training a RWKV model (130M) comparable in size to GPT-2 (124M) using the OpenWebText dataset on a single 8*V100 32GB node. To follow the progress of **ongoing** experiments, please refer to this [wandb project](https://wandb.ai/hannibal046/nanoRWKV?workspace=user-hannibal046).
-
 ![nanoGPT](assets/current_loss.png)
 
 RWKV is essentially an RNN with unrivaled advantage when doing inference. Here we benchmark the speed and space occupation of RWKV, along with its Transformer counterpart (code could be found [here](https://github.com/Hannibal046/nanoRWKV/blob/main/benchmark_inference_time.py)). We could easily find:
@@ -74,12 +72,12 @@ For comparision, we also train a GPT-2 model(124M) on the same device with:
 torchrun --standalone --nproc_per_node=8 train.py config/train_gpt2.py
 ```
 
-We got the results as follows (check the progress on this [wandb project](https://wandb.ai/hannibal046/nanoRWKV?workspace=user-hannibal046)):
+We got the results as follows (check this [wandb project](https://wandb.ai/hannibal046/nanoRWKV?workspace=user-hannibal046)):
 
 | model | params | train loss | val loss |
 | ----- | ------ | ---------- | -------- |
-| GPT-2 | 124M   |            |          |
-| RWKV  | 130M   |            |          |
+| GPT-2 | 124M   |  2.82      |  2.86    |
+| RWKV  | 130M   |  2.85      |  2.88    |
 
 ### baselines
 
