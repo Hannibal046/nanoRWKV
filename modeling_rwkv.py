@@ -596,7 +596,7 @@ class RWKV(nn.Module):
     def load_cuda_kernel(self,dtype):
         
         from torch.utils.cpp_extension import load
-        T_MAX = 1024
+        T_MAX = self.config.block_size
         RWKV_FLOAT_MODE = dtype
         if RWKV_FLOAT_MODE == "bfloat16":
             wkv_cuda = load(name=f"wkv_{T_MAX}_bf16", sources=["cuda/wkv_op_bf16.cpp", "cuda/wkv_cuda_bf16.cu"], verbose=True, extra_cuda_cflags=["-t 4", "-std=c++17", "-res-usage", "--maxrregcount 60", "--use_fast_math", "-O3", "-Xptxas -O3", "--extra-device-vectorization", f"-DTmax={T_MAX}"])
