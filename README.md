@@ -15,6 +15,14 @@ RWKV is essentially an RNN with unrivaled advantage when doing inference. Here w
 
 ![benchmark](assets/benchmark.png)
 
+## Animation
+### Time Mixing
+![](assets/time_mixing.gif)
+
+### Channel Mixing
+![](assets/channel_mixing.gif)
+
+
 ## Table of Contents  
 We organize this project as follows:
 - [Installation](#installation)
@@ -51,6 +59,7 @@ Before kicking off this project, make sure you are familiar with the following c
 
 ## Tutorial
 We would present a step-by-step tutorial of building RWKV in a jupyter notebook.
+
 
 ## Reproduction
 
