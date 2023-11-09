@@ -168,7 +168,7 @@ class TimeMixing(nn.Module):
             return WKVKernel.apply(B, T, C, self.time_decay, self.time_first, key, value), None
         
         ## raw wkv function (from Huggingface Implementation)
-        ## only for generation
+        ## only for generation (because using raw pytorch for loop to train the model would be super super slow)
         else:    
             _, seq_length, _ = key.size()
             output = torch.zeros_like(key)
